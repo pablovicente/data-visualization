@@ -1,0 +1,190 @@
+---
+title: "Week 1"
+author: "Pablo Vicente"
+date: "1/24/2017"
+output: html_document
+---
+
+##### Loading required libraries
+
+```{r Code Block 1, message=FALSE}
+library(babynames)
+library(ggplot2)    # the king of plotting 
+library(magrittr)   # chain operators, e.g. to "pipe" a value forward
+library(dplyr)      # for data manipulation 
+```
+
+##### A few functions to visualize our dataset
+```{r}
+str(babynames)
+```
+Another one...
+```{r}
+summary(babynames)
+```
+One more...
+```{r}
+head(babynames)
+```
+
+##### Counting different names
+```{r}
+length(unique(babynames$name))
+```
+
+##### Plotting for both sexs
+```{r}
+ggplot(babynames, aes(year, n)) +
+  geom_line(data = filter(babynames, name=="James"))
+```
+
+##### We can see the problem with the following command
+```{r}
+head(filter(babynames, name=="James"))
+```
+
+##### Filtering by name but also splitting by sex
+```{r}
+ggplot(babynames, aes(year, n)) +
+  geom_line(data = filter(babynames, name=="James"), aes(color=sex))
+```
+
+##### Try to follow this code chunk at home, using dplyr() and magrittr()
+```{r}
+top10 <- babynames %>%
+  group_by(sex, name) %>%
+  summarize(total = sum(n)) %>%
+  arrange(desc(total)) %>%
+  group_by(sex) %>%
+  mutate(rank=row_number()) %>%
+  filter(rank<=10)  %>%
+  arrange(sex, rank)
+
+top10f <- top10 %>% filter(sex=="F")
+top10m <- top10 %>% filter(sex=="M")  
+```
+
+##### Plotting most 10 common names
+
+##### Females
+```{r}
+babynames %>%
+  filter(sex=="F") %>%
+  filter(name %in% top10f$name) %>%
+  ggplot(., aes(year, n)) +
+  geom_line(aes(color=name, group=name))
+```
+
+##### Males
+```{r}
+babynames %>%
+  filter(sex=="M") %>%
+  filter(name %in% top10m$name) %>%
+  ggplot(., aes(year, n)) +
+  geom_line(aes(color=name, group=name))
+```
+
+##### Plot the most common names in 2013 over the entire period.
+
+```{r}
+top10_2013 <- babynames %>%
+  filter(year==2013) %>%
+  group_by(sex, name) %>%  
+  summarize(total = sum(n)) %>%
+  arrange(desc(total)) %>%
+  group_by(sex) %>%
+  mutate(rank=row_number()) %>%
+  filter(rank<=10)  %>%
+  arrange(sex, rank)
+
+top10f_2013 <- top10_2013 %>% filter(sex=="F")
+top10m_2013 <- top10_2013 %>% filter(sex=="M") 
+top10u_2013 <- Map(c, top10_2013 %>% filter(sex=="M") %>% head(., n=5), top10_2013 %>% filter(sex=="F") %>% head(., n=5))
+```
+
+##### Females
+```{r}
+babynames %>%
+  filter(sex=="F") %>%
+  filter(name %in% top10f_2013$name) %>%
+  ggplot(., aes(year, n)) +
+  geom_line(aes(color=name, group=name))
+```
+
+##### Males
+```{r}
+babynames %>%
+  filter(sex=="M") %>%
+  filter(name %in% top10m_2013$name) %>%
+  ggplot(., aes(year, n)) +
+  geom_line(aes(color=name, group=name))
+```
+
+##### Explore which names are most often used as unisex names. 
+```{r}
+top10_unisex <- babynames %>%
+  group_by(sex,name) %>%
+  summarize(total = sum(n)) %>%
+  group_by(name) %>%
+  filter(n() > 1) %>%
+  group_by(sex)
+
+f <- top10_unisex %>% filter(sex=="F") %>% arrange(desc(name))
+m <- top10_unisex %>% filter(sex=="M") %>% arrange(desc(name))
+m['diff'] <- abs(m$total - f$total)
+names_diff <- m[order(-m$diff), ]
+```
+The first 6 elements of the sorted data frame are shown. These elements are the ones with a biggest difference between male and female names. Thus, we can argue that they are not used as unisex names. 
+```{r}
+head(names_diff)
+```
+
+The last 6 elements of the sorted data frame are shown. These elements are the ones with a lowest difference between male and female names. However, due to the number of times they have been used is significantly low. We should look for name whose ratio of high number of repetitions and low number for the difference. 
+
+```{r}
+tail(names_diff)
+```
+
+##### For which names has the popularity over time changed a lot?  
+```{r}
+# Coefficient of variation function
+CV <- function(mean, sd){
+      (sd/mean)*100
+      }
+# Group by sex and calculate the mean for each of them
+baby_stats <- babynames %>% 
+  group_by(sex) %>% 
+  as.data.frame() %>% 
+  aggregate(n~name, ., mean)
+
+# Renaming the mean column
+baby_stats <- plyr::rename(baby_stats, c("n"="mean"))
+
+# Proceding as previous, the standard deviation is calculated 
+# and added to the previous dataframe
+baby_stats['sd'] <- babynames %>% 
+  group_by(sex) %>% 
+  as.data.frame() %>% 
+  aggregate(n~name, ., sd) %>%
+  .$n
+
+# Calculating of CV for each name
+baby_stats['cv'] <- CV(baby_stats$mean, baby_stats$sd)
+
+# Sorting by CV
+baby_stats <- baby_stats %>% arrange(desc(cv))
+
+# Selecting the 10 names with highest variation
+top10_var <- head(baby_stats, n = 10)$name
+
+# For each of the selected names, group by name and year
+# and calculate the total sum of elements for name and year
+top10_records <- babynames %>%
+  filter(name %in% top10_var) %>% 
+  group_by(name,year) %>%
+  summarize(total = sum(n))
+
+ggplot(data = top10_records, aes(year, total)) +
+  geom_line( aes(color=name, group=name))
+
+```
